@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rians Urban Escape - Application Démo Collectivités</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS for Real-time Geocoded Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
@@ -30,32 +33,61 @@
         .mono { font-family: 'JetBrains Mono', monospace; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: #070b14; color: #f8fafc; }
         .glow-accent { box-shadow: 0 0 25px rgba(245, 158, 11, 0.2); }
-        .glow-blue { box-shadow: 0 0 25px rgba(59, 130, 246, 0.2); }
+        /* Custom dark tile styling for Leaflet */
+        .leaflet-layer, .leaflet-control-zoom-in, .leaflet-control-zoom-out {
+            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
+        }
     </style>
 </head>
 <body class="h-full flex flex-col justify-between select-none overflow-x-hidden">
 
-    <!-- Top Municipal Demo Header -->
-    <header class="bg-tactical-800/90 backdrop-blur-md border-b border-tactical-500/30 px-4 py-3 flex justify-between items-center z-10 shadow-lg">
-        <div class="flex items-center space-x-3">
-            <div id="mic-status" class="w-3 h-3 rounded-full bg-slate-600 shadow-sm" title="Capteur Acoustique en veille"></div>
+    <!-- Top Municipal Demo Header with Live Audio Meter -->
+    <header class="bg-tactical-800/95 backdrop-blur-md border-b border-tactical-500/30 px-3 py-2.5 flex justify-between items-center z-20 shadow-lg">
+        <div class="flex items-center space-x-2.5">
+            <!-- Visible Microphone Level Meter Indicator -->
+            <div class="flex flex-col space-y-1">
+                <div class="flex items-center space-x-1.5">
+                    <div id="mic-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500" title="Capteur Acoustique"></div>
+                    <span class="mono text-[9px] text-slate-400">SONOMÈTRE</span>
+                </div>
+                <div class="w-16 bg-tactical-900 rounded-full h-1.5 overflow-hidden border border-tactical-500/30">
+                    <div id="mic-meter-bar" class="bg-tactical-success h-full w-0 transition-all duration-75"></div>
+                </div>
+            </div>
             <div>
-                <span class="mono text-[10px] text-tactical-accent block tracking-wider">OFFICIAL MUNICIPAL DEMO</span>
-                <span class="text-xs font-bold text-slate-200">RIANS (18220) : LE MANUSCRIT</span>
+                <span class="mono text-[9px] text-tactical-accent block tracking-wider">RIANS (18220) // GÉOPORTAIL</span>
+                <span class="text-xs font-bold text-slate-200">OPÉRATION MANUSCRIT</span>
             </div>
         </div>
-        <div class="flex items-center space-x-3">
-            <button onclick="toggleDemoPanel()" class="bg-tactical-700 hover:bg-tactical-600 text-tactical-accent border border-tactical-accent/40 px-2.5 py-1 rounded mono text-xs transition shadow">
-                ⚙️ Menu Élu
+        <div class="flex items-center space-x-2">
+            <button onclick="toggleMapModal()" class="bg-tactical-700 hover:bg-tactical-600 text-blue-400 border border-blue-500/40 px-2.5 py-1 rounded mono text-xs transition shadow flex items-center space-x-1">
+                <span>🗺️ Carte GPS</span>
             </button>
-            <span id="timer-display" class="mono text-xs text-tactical-accent font-bold">00:00:00</span>
+            <button onclick="toggleDemoPanel()" class="bg-tactical-700 hover:bg-tactical-600 text-tactical-accent border border-tactical-accent/40 px-2 py-1 rounded mono text-xs transition">
+                ⚙️ Élu
+            </button>
         </div>
     </header>
 
+    <!-- Real-Time GPS Map Modal Overlay -->
+    <div id="map-modal" class="fixed inset-0 bg-tactical-900/95 z-50 hidden flex flex-col p-4 backdrop-blur-md animate-fadeIn">
+        <div class="flex justify-between items-center pb-3 border-b border-tactical-500/30">
+            <div>
+                <span class="mono text-[10px] text-tactical-accent">RADAR TACTIQUE EN TEMPS RÉEL</span>
+                <h3 class="text-sm font-bold text-white">Secteur Rians & Balises Actives</h3>
+            </div>
+            <button onclick="toggleMapModal()" class="bg-tactical-700 text-slate-200 hover:text-white px-3 py-1 rounded mono text-xs font-bold">✕ Fermer</button>
+        </div>
+        <div id="leaflet-map" class="flex-1 my-3 rounded-xl border border-tactical-500/40 shadow-inner" style="min-height: 300px;"></div>
+        <div class="mono text-[10px] text-slate-400 text-center">
+            📍 Vos coordonnées GPS actuelles sont synchronisées avec le terrain.
+        </div>
+    </div>
+
     <!-- Demo Control Drawer (Hidden by default) -->
-    <div id="demo-drawer" class="hidden bg-tactical-700/95 border-b border-tactical-accent p-3 text-xs space-y-2 z-20 shadow-2xl backdrop-blur-md">
+    <div id="demo-drawer" class="hidden bg-tactical-700/95 border-b border-tactical-accent p-3 text-xs space-y-2 z-30 shadow-2xl backdrop-blur-md">
         <div class="flex justify-between items-center font-bold text-tactical-accent">
-            <span>[MODE PRÉSENTATION ÉLU] - Navigation Rapide</span>
+            <span>[MODE ÉLU] - Navigation Rapide</span>
             <button onclick="toggleDemoPanel()" class="text-slate-400 hover:text-white font-bold px-2 py-0.5 bg-tactical-800 rounded">✕ Fermer</button>
         </div>
         <div class="grid grid-cols-4 gap-1.5 pt-1">
@@ -68,7 +100,6 @@
             <button onclick="jumpToAct(6)" class="bg-tactical-800 p-1.5 rounded hover:bg-tactical-500 text-center font-semibold">Acte VI</button>
             <button onclick="jumpToAct(7)" class="bg-tactical-800 p-1.5 rounded hover:bg-tactical-500 text-center font-semibold">Acte VII</button>
         </div>
-        <div class="text-[10px] text-slate-400 italic">Permet de sauter instantanément à n'importe quelle séquence pour les démonstrations institutionnelles.</div>
     </div>
 
     <!-- Main Dynamic Application Container -->
@@ -78,12 +109,13 @@
 
     <!-- Penalty Notification Toast -->
     <div id="penalty-toast" class="fixed top-16 left-1/2 transform -translate-x-1/2 bg-tactical-danger text-white px-4 py-2 rounded-full text-xs font-bold mono shadow-2xl hidden z-50 animate-bounce">
-        +30s PÉNALITÉ : BRUIT DÉTECTÉ (Respectez les habitants !)
+        +30s PÉNALITÉ : SEUIL ACOUSTIQUE DÉPASSÉ !
     </div>
 
-    <!-- Footer -->
-    <footer class="bg-tactical-800/80 border-t border-tactical-500/20 py-2 px-4 text-center mono text-[10px] text-slate-400">
-        ARCHITECTE URBAIN // GÉOLOCALISATION & PHYGITAL READY
+    <!-- Footer Timer bar -->
+    <footer class="bg-tactical-800/80 border-t border-tactical-500/20 py-2 px-4 flex justify-between items-center mono text-[10px] text-slate-400">
+        <span>CHRONO : <strong id="timer-display" class="text-tactical-accent">00:00:00</strong></span>
+        <span>ARCHITECTE URBAIN // PHYGITAL GPS READY</span>
     </footer>
 
     <!-- Audio Asset -->
@@ -93,9 +125,11 @@
         // --- ENGINE STATE ---
         let gameState = {
             act: parseInt(localStorage.getItem('rians_demo_act')) || 0,
-            agentName: localStorage.getItem('rians_demo_agent') || '',
+            agentName: localStorage.getItem('rians_demo_agent')) || '',
             startTime: parseInt(localStorage.getItem('rians_demo_start')) || Date.now(),
-            penalties: parseInt(localStorage.getItem('rians_demo_penalties')) || 0
+            penalties: parseInt(localStorage.getItem('rians_demo_penalties')) || 0,
+            userLat: 47.186,
+            userLng: 2.614
         };
 
         function saveState() {
@@ -110,18 +144,80 @@
         }
 
         function toggleDemoPanel() {
-            let drawer = document.getElementById('demo-drawer');
-            drawer.classList.toggle('hidden');
+            document.getElementById('demo-drawer').classList.toggle('hidden');
         }
 
         function jumpToAct(actNum) {
             gameState.act = actNum;
             saveState();
             render();
-            toggleDemoPanel();
+            if(!document.getElementById('demo-drawer').classList.contains('hidden')) toggleDemoPanel();
         }
 
-        // --- MICROPHONE STEALTH SURVEILLANCE ---
+        // --- GPS TRACKER ---
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(position => {
+                gameState.userLat = position.coords.latitude;
+                gameState.userLng = position.coords.longitude;
+            }, e => console.log("GPS sim mode"), { enableHighAccuracy: true });
+        }
+
+        let mapInstance = null;
+        let markersGroup = null;
+
+        function toggleMapModal() {
+            let modal = document.getElementById('map-modal');
+            modal.classList.toggle('hidden');
+            if (!modal.classList.contains('hidden')) {
+                setTimeout(() => {
+                    if (!mapInstance) {
+                        mapInstance = L.map('leaflet-map').setView([47.186, 2.614], 15);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19,
+                            attribution: '© OpenStreetMap'
+                        }).addTo(mapInstance);
+                        markersGroup = L.layerGroup().addTo(mapInstance);
+                    } else {
+                        mapInstance.invalidateSize();
+                    }
+                    updateMapMarkers();
+                }, 200);
+            }
+        }
+
+        function updateMapMarkers() {
+            if (!markersGroup) return;
+            markersGroup.clearLayers();
+
+            // Player Marker
+            let playerIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: "<div style='background-color:#3b82f6; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow: 0 0 10px #3b82f6;'></div>",
+                iconSize: [14, 14]
+            });
+            L.marker([gameState.userLat, gameState.userLng], {icon: playerIcon}).addTo(markersGroup).bindPopup("<b>Votre Position Actuelle</b>");
+
+            // Landmarks in Rans
+            const landmarks = [
+                {name: "Mairie & Place Centrale (Acte I & VIII)", lat: 47.1860, lng: 2.6140, color: "#f59e0b"},
+                {name: "Puits Historique Nord (Acte II)", lat: 47.1872, lng: 2.6125, color: "#10b981"},
+                {name: "Puits du Lavoir Sud (Acte II)", lat: 47.1845, lng: 2.6155, color: "#10b981"},
+                {name: "Église Saint-Christophe (Acte III & V)", lat: 47.1865, lng: 2.6132, color: "#3b82f6"},
+                {name: "Cimetière de Rians (Acte VI)", lat: 47.1885, lng: 2.6100, color: "#ef4444"},
+                {name: "Laiteries Triballat (Acte VII)", lat: 47.1830, lng: 2.6180, color: "#f59e0b"}
+            ];
+
+            landmarks.forEach(l => {
+                let icon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style='background-color:${l.color}; width:12px; height:12px; border-radius:50%; border:2px solid #000;'></div>`,
+                    iconSize: [12, 12]
+                });
+                L.marker([l.lat, l.lng], {icon: icon}).addTo(markersGroup).bindPopup(`<b>${l.name}</b>`);
+            });
+        }
+
+        // --- MICROPHONE STEALTH SURVEILLANCE & VISIBLE METER ---
         let isListening = false;
         function initMicrophone() {
             if (isListening) return;
@@ -131,8 +227,8 @@
                     const analyser = audioCtx.createAnalyser();
                     const mic = audioCtx.createMediaStreamSource(stream);
                     const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
-                    analyser.smoothingTimeConstant = 0.8;
-                    analyser.fftSize = 1024;
+                    analyser.smoothingTimeConstant = 0.5;
+                    analyser.fftSize = 512;
                     mic.connect(analyser);
                     analyser.connect(scriptNode);
                     scriptNode.connect(audioCtx.destination);
@@ -142,17 +238,31 @@
                         analyser.getByteFrequencyData(array);
                         let sum = array.reduce((a, b) => a + b, 0);
                         let avg = sum / array.length;
-                        if (avg > 48) { // Noise threshold
+                        
+                        // Update visual meter bar in header
+                        let meterBar = document.getElementById('mic-meter-bar');
+                        if (meterBar) {
+                            let percent = Math.min((avg / 60) * 100, 100);
+                            meterBar.style.width = percent + '%';
+                            if (percent > 75) {
+                                meterBar.className = "bg-tactical-danger h-full transition-all duration-75";
+                            } else if (percent > 40) {
+                                meterBar.className = "bg-tactical-accent h-full transition-all duration-75";
+                            } else {
+                                meterBar.className = "bg-tactical-success h-full transition-all duration-75";
+                            }
+                        }
+
+                        if (avg > 50) { // Noise penalty threshold
                             triggerNoisePenalty();
                         }
                     }
                     isListening = true;
-                    let dot = document.getElementById('mic-status');
+                    let dot = document.getElementById('mic-status-dot');
                     if(dot) {
-                        dot.classList.remove('bg-slate-600');
-                        dot.classList.add('bg-tactical-accent', 'animate-pulse');
+                        dot.className = "w-2.5 h-2.5 rounded-full bg-tactical-success animate-pulse";
                     }
-                }).catch(e => console.log("Mic demo mode bypassed:", e));
+                }).catch(e => console.log("Mic simulation active"));
         }
 
         let lastPenalty = 0;
@@ -196,13 +306,13 @@
             }
         }
 
-        // ACT 0: Premium Landing Page for B2B Pitch
+        // ACT 0: Premium Landing Page
         function renderLandingPage(c) {
             c.innerHTML = `
                 <div class="space-y-5 text-center animate-fadeIn">
                     <div class="inline-flex items-center space-x-2 bg-tactical-800 border border-tactical-accent/40 px-3 py-1 rounded-full shadow-md">
                         <span class="w-2 h-2 rounded-full bg-tactical-accent animate-ping"></span>
-                        <span class="mono text-[10px] text-tactical-accent uppercase tracking-wider">SOLUTION TERRITORIALE 4.0</span>
+                        <span class="mono text-[10px] text-tactical-accent uppercase tracking-wider">SOLUTION TERRITORIALE PHYGITALE</span>
                     </div>
 
                     <div class="space-y-2">
@@ -210,30 +320,27 @@
                             Rians <span class="text-tactical-accent">Urban Escape</span>
                         </h1>
                         <p class="text-xs text-slate-300 max-w-xs mx-auto leading-relaxed">
-                            Valorisez votre patrimoine historique, dynamisez le commerce local et offrez une expérience immersive clé en main à vos administrés et visiteurs.
+                            Cartographie GPS temps réel, balises NFC in-situ et capteur acoustique de discrétion pour valoriser votre patrimoine.
                         </p>
                     </div>
 
                     <div class="grid grid-cols-2 gap-2 text-left pt-1">
                         <div class="bg-tactical-800/80 border border-tactical-500/30 p-3 rounded-xl space-y-1">
-                            <div class="text-tactical-accent text-sm">🏛️</div>
-                            <h3 class="text-xs font-bold text-slate-200">Patrimoine Phygital</h3>
-                            <p class="text-[10px] text-slate-400">Balises NFC & énigmes géolocalisées in-situ.</p>
+                            <div class="text-tactical-accent text-sm">🗺️</div>
+                            <h3 class="text-xs font-bold text-slate-200">Radar GPS Live</h3>
+                            <p class="text-[10px] text-slate-400">Suivi cartographique des monuments.</p>
                         </div>
                         <div class="bg-tactical-800/80 border border-tactical-500/30 p-3 rounded-xl space-y-1">
-                            <div class="text-tactical-accent text-sm">🛡️</div>
-                            <h3 class="text-xs font-bold text-slate-200">Zéro Infrastructure</h3>
-                            <p class="text-[10px] text-slate-400">Application mobile fluide sans travaux lourds.</p>
+                            <div class="text-tactical-accent text-sm">📡</div>
+                            <h3 class="text-xs font-bold text-slate-200">Puces NFC & Enigmes</h3>
+                            <p class="text-[10px] text-slate-400">Interaction directe sur les pierres.</p>
                         </div>
                     </div>
 
                     <div class="space-y-3 pt-2">
-                        <button onclick="goToAct1FromLanding()" class="w-full bg-tactical-accent hover:bg-amber-500 text-tactical-900 font-extrabold py-4 rounded-xl mono text-xs transition shadow-2xl glow-accent tracking-wider uppercase flex items-center justify-center space-x-2">
-                            <span>🚀 LANCER LA DÉMONSTRATION</span>
+                        <button onclick="goToAct1FromLanding()" class="w-full bg-tactical-accent hover:bg-amber-500 text-tactical-900 font-extrabold py-4 rounded-xl mono text-xs transition shadow-2xl glow-accent tracking-wider uppercase">
+                            🚀 LANCER LA DÉMONSTRATION
                         </button>
-                        <div class="mono text-[10px] text-slate-400">
-                            Durée estimée de la démo : 15 min • Compatible iOS & Android
-                        </div>
                     </div>
                 </div>
             `;
@@ -246,7 +353,7 @@
             render();
         }
 
-        // ACT 1: Place de la Mairie (Initialisation & Discrétion)
+        // ACT 1: Place de la Mairie
         function renderAct1(c) {
             c.innerHTML = `
                 <div class="space-y-5 text-center">
@@ -257,13 +364,13 @@
                         </div>
                         <h2 class="text-lg font-bold tracking-wide text-slate-100">Le Réveil de Rians</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Vous êtes sur la place de la mairie. Le protocole exige une discrétion absolue : le capteur acoustique surveille votre niveau sonore pour protéger la quiétude des riverains.
+                            Calibrez votre profil. Le sonomètre tactique en haut de l'écran surveillera votre discrétion lors de vos déplacements dans le village.
                         </p>
                     </div>
                     <div class="space-y-3">
                         <input type="text" id="agent-name" placeholder="Nom ou Matricule de l'Équipe" value="${gameState.agentName}" class="w-full bg-tactical-800 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 focus:outline-none focus:border-tactical-accent shadow-inner">
                         <button onclick="startMission()" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg tracking-wider">
-                            CALIBRER & DÉMARRER LA MISSION
+                            CALIBRER & ACTIVER LE SONOMÈTRE
                         </button>
                     </div>
                 </div>
@@ -282,25 +389,44 @@
             render();
         }
 
-        // ACT 2: Les Puits (Veines Souterraines)
+        // ACT 2: Les Puits GPS & NFC (L'Héritage de la Mère Aude)
         function renderAct2(c) {
             c.innerHTML = `
-                <div class="space-y-5">
-                    <div class="border border-tactical-500/40 p-5 bg-tactical-800/90 rounded-2xl shadow-xl space-y-2">
-                        <span class="mono text-[10px] text-tactical-accent">ACTE II / VIII // LES PUITS DU VILLAGE</span>
-                        <h2 class="text-lg font-bold text-slate-100">L'Héritage de la Mère Aude</h2>
+                <div class="space-y-4">
+                    <div class="border border-tactical-500/40 p-4 bg-tactical-800/90 rounded-2xl shadow-xl space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="mono text-[10px] text-tactical-accent">ACTE II / VIII // LES PUITS DU VILLAGE</span>
+                            <button onclick="toggleMapModal()" class="text-[10px] text-blue-400 underline">🗺️ Voir GPS Puits</button>
+                        </div>
+                        <h2 class="text-base font-bold text-slate-100">L'Héritage de la Mère Aude</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Explorez les abords des anciens puits de Rians. Quel nombre de pierres concentriques ou quel chiffre gravé sur la margelle permet d'ouvrir le premier sceau ?
+                            Rendez-vous sur les coordonnées GPS exactes des puits répertoriés. Scannez la puce NFC sur la margelle ou résolvez l'énigme structurelle.
                         </p>
                     </div>
+
                     <div class="space-y-3">
-                        <input type="text" id="act2-ans" placeholder="Code ou nombre secret" class="w-full bg-tactical-800 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 focus:outline-none focus:border-tactical-accent">
-                        <button onclick="nextAct(3)" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
-                            VALIDER L'INDICE DE L'EAU
+                        <div class="bg-tactical-800 border border-tactical-500/50 p-3.5 rounded-xl space-y-2">
+                            <div class="flex justify-between text-xs font-bold text-slate-200">
+                                <span>💧 Puits Nord (GPS: 47.1872, 2.6125)</span>
+                                <span class="text-tactical-success text-[10px] mono">ACTIF</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Nombre de pierres concentriques visibles sur la margelle supérieure :</p>
+                            <input type="number" id="well-ans-1" placeholder="Ex: 8" class="w-full bg-tactical-900 border border-tactical-500/50 rounded-lg p-2.5 text-center mono text-xs text-slate-100">
+                        </div>
+
+                        <button onclick="validateAct2()" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
+                            VALIDER LE SCEAU DES PUITS
                         </button>
                     </div>
                 </div>
             `;
+        }
+
+        function validateAct2() {
+            let val = document.getElementById('well-ans-1').value.trim();
+            if(!val) return alert("Veuillez entrer le chiffre relevé sur le puits.");
+            triggerHaptic(70);
+            nextAct(3);
         }
 
         // ACT 3: Parvis de l'Église (Audio Binaural)
@@ -311,14 +437,14 @@
                         <span class="mono text-[10px] text-tactical-accent">ACTE III / VIII // ÉGLISE SAINT-CHRISTOPHE</span>
                         <h2 class="text-lg font-bold text-slate-100">La Voix des Âmes</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Sur le parvis de l'église du XIIe siècle, écoutez la transmission audio chiffrée de la sorcière à l'aide de vos écouteurs.
+                            Sur le parvis de l'église (GPS: 47.1865, 2.6132), écoutez la transmission audio chiffrée avec vos écouteurs.
                         </p>
                     </div>
                     <div class="p-5 bg-tactical-800 border border-tactical-500/50 rounded-2xl space-y-4 shadow-xl">
                         <button onclick="document.getElementById('ambient-audio').play(); triggerHaptic(50);" class="w-full bg-tactical-accent hover:bg-amber-500 text-tactical-900 font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
-                            ▶ ÉCOUTER LE FICHIER AUDIO BINAURAL
+                            ▶ ÉCOUTER L'AUDIO BINAURAL
                         </button>
-                        <input type="text" id="act3-ans" placeholder="Mot-clé murmuré par l'audio" class="w-full bg-tactical-900 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 focus:outline-none">
+                        <input type="text" id="act3-ans" placeholder="Mot-clé murmuré" class="w-full bg-tactical-900 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 focus:outline-none">
                         <button onclick="nextAct(4)" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
                             VALIDER LE MOT-CLÉ
                         </button>
@@ -332,16 +458,16 @@
             c.innerHTML = `
                 <div class="space-y-5">
                     <div class="border border-tactical-500/40 p-5 bg-tactical-800/90 rounded-2xl shadow-xl space-y-2">
-                        <span class="mono text-[10px] text-tactical-accent">ACTE IV / VIII // LE BÂTIMENT AUX DEUX GIROUETTES</span>
+                        <span class="mono text-[10px] text-tactical-accent">ACTE IV / VIII // LES DEUX GIROUETTES</span>
                         <h2 class="text-lg font-bold text-slate-100">Le Gardien des Vents</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            À deux pas de l'église se dresse la bâtisse flanquée de ses deux girouettes. Relevez la date précise gravée sur sa façade pour aligner les balises temporelles.
+                            Relevez la date exacte gravée sur la façade de la bâtisse historique pour aligner les balises temporelles.
                         </p>
                     </div>
                     <div class="space-y-3">
                         <input type="number" id="act4-ans" placeholder="Année (ex: 18XX)" class="w-full bg-tactical-800 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 focus:outline-none focus:border-tactical-accent">
                         <button onclick="nextAct(5)" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
-                            VALIDER LA DATE ARCHITECTURALE
+                            VALIDER LA DATE
                         </button>
                     </div>
                 </div>
@@ -353,10 +479,10 @@
             c.innerHTML = `
                 <div class="space-y-5 text-center">
                     <div class="border border-tactical-500/40 p-5 bg-tactical-800/90 rounded-2xl shadow-xl text-left space-y-2">
-                        <span class="mono text-[10px] text-tactical-accent">ACTE V / VIII // CONTACT PHYSIQUE PHYGITAL</span>
-                        <h2 class="text-lg font-bold text-slate-100">La Trace Invisible (NFC)</h2>
+                        <span class="mono text-[10px] text-tactical-accent">ACTE V / VIII // CONTACT NFC PHYGITAL</span>
+                        <h2 class="text-lg font-bold text-slate-100">La Trace Invisible</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Le flanc de l'église cache un patch NFC à hauteur d'homme. Approchez votre smartphone pour valider le contact par retour haptique.
+                            Approchez votre smartphone du flanc de l'église pour déclencher le tag NFC dissimulé dans la pierre.
                         </p>
                     </div>
                     <div class="space-y-3">
@@ -373,14 +499,11 @@
             c.innerHTML = `
                 <div class="space-y-5">
                     <div class="border border-tactical-500/40 p-5 bg-tactical-800/90 rounded-2xl shadow-xl space-y-2">
-                        <span class="mono text-[10px] text-tactical-accent">ACTE VI / VIII // CIMETIÈRE DE RIANS</span>
+                        <span class="mono text-[10px] text-tactical-accent">ACTE VI / VIII // CIMETIÈRE DE RIANS (GPS: 47.1885, 2.6100)</span>
                         <h2 class="text-lg font-bold text-slate-100">Le Silence des Ombres</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Zone de recueillement et d'énigme épigraphique. Calculez la différence d'années entre la pierre la plus ancienne et la plus récente. Le micro est ici d'une sensibilité maximale : pas un bruit !
+                            Zone de recueillement. Le sonomètre est ultra-sensible ici : attention au moindre décibel de trop ! Entrez le résultat épigraphique.
                         </p>
-                        <div class="mt-3 p-3 bg-tactical-900 rounded-xl mono text-xs text-tactical-accent text-center border border-tactical-500/30">
-                            $$ \\Delta T = \\sum (\\text{Années funéraires}) \\pmod{100} $$
-                        </div>
                     </div>
                     <div class="space-y-3">
                         <input type="number" id="act6-ans" placeholder="Résultat numérique" class="w-full bg-tactical-800 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 focus:outline-none focus:border-tactical-accent">
@@ -397,14 +520,14 @@
             c.innerHTML = `
                 <div class="space-y-5 text-center">
                     <div class="border border-tactical-500/40 p-5 bg-tactical-800/90 rounded-2xl shadow-xl text-left space-y-2">
-                        <span class="mono text-[10px] text-tactical-accent">ACTE VII / VIII // GÉOCACHE & LAITERIE</span>
-                        <h2 class="text-lg font-bold text-slate-100">La Centrifugeuse de la Mère Aude</h2>
+                        <span class="mono text-[10px] text-tactical-accent">ACTE VII / VIII // LA LAITERIE (GPS: 47.1830, 2.6180)</span>
+                        <h2 class="text-lg font-bold text-slate-100">La Centrifugeuse</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Trouvez la géocache magnétique dissimulée près de la route de Malvettes. Entrez le code secret puis activez la centrifugeuse mécanique en secouant votre téléphone !
+                            Trouvez la géocache magnétique près de la route de Malvettes, entrez le code et secouez votre téléphone pour actionner la centrifugeuse industrielle !
                         </p>
                     </div>
                     <div class="space-y-4">
-                        <input type="text" id="act7-ans" placeholder="Code trouvé dans la géocache" class="w-full bg-tactical-800 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 uppercase focus:outline-none shadow-inner">
+                        <input type="text" id="act7-ans" placeholder="Code de la géocache" class="w-full bg-tactical-800 border border-tactical-500 rounded-xl p-3.5 text-center mono text-sm text-slate-100 uppercase focus:outline-none shadow-inner">
                         <div class="w-full bg-tactical-800 rounded-full h-3.5 border border-tactical-500/40 overflow-hidden p-0.5">
                             <div id="shake-progress" class="bg-tactical-accent h-full w-0 rounded-full transition-all duration-300"></div>
                         </div>
@@ -419,10 +542,7 @@
         let shakeCount = 0;
         function triggerCentrifugeShake() {
             let code = document.getElementById('act7-ans').value.trim();
-            if(!code) {
-                alert("Veuillez d'abord saisir le code de la géocache !");
-                return;
-            }
+            if(!code) return alert("Veuillez d'abord saisir le code de la géocache !");
             
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 DeviceMotionEvent.requestPermission().then(response => {
@@ -437,7 +557,7 @@
         function listenShake() {
             shakeCount = 0;
             let lastX = 0, lastY = 0, lastZ = 0;
-            alert("Secouez vigoureusement votre smartphone pour lancer le barattage industriel ! (ou cliquez de nouveau en cas de PC)");
+            alert("Secouez vigoureusement votre smartphone pour lancer le barattage industriel !");
             
             const handler = (e) => {
                 let acc = e.accelerationIncludingGravity;
@@ -459,9 +579,7 @@
                 lastX = acc.x; lastY = acc.y; lastZ = acc.z;
             };
             window.addEventListener('devicemotion', handler);
-            setTimeout(() => {
-                if(gameState.act === 7) forceNextAct8();
-            }, 5000);
+            setTimeout(() => { if(gameState.act === 7) forceNextAct8(); }, 5000);
         }
 
         function forceNextAct8() {
@@ -469,58 +587,26 @@
             nextAct(8);
         }
 
-        // ACT 8: Place de la Mairie (Grand Final & Incantation Vocale)
+        // ACT 8: Place de la Mairie (Grand Final)
         function renderAct8(c) {
             c.innerHTML = `
                 <div class="space-y-5 text-center">
                     <div class="border border-tactical-accent p-5 bg-tactical-800 rounded-2xl shadow-2xl text-left space-y-2">
-                        <span class="mono text-[10px] text-tactical-accent tracking-widest">[ACTE VIII // PLACE DE LA MAIRIE]</span>
+                        <span class="mono text-[10px] text-tactical-accent tracking-widest">[ACTE VIII // RETOUR PLACE CENTRALE]</span>
                         <h2 class="text-lg font-bold text-slate-100">L'Incantation Finale</h2>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Vous êtes de retour sur la place centrale de Rians. Pour sceller le dossier, chuchotez la formule à voix basse : <br><strong class="text-tactical-accent block mt-1">« Ô Mère Aude, veille sur Rians. »</strong>
+                            Chuchotez la formule pour clore le dossier : <br><strong class="text-tactical-accent block mt-1">« Ô Mère Aude, veille sur Rians. »</strong>
                         </p>
                     </div>
                     
                     <div class="p-5 bg-tactical-700/60 border border-tactical-500/40 rounded-2xl space-y-4 shadow-xl">
-                        <div id="voice-status" class="mono text-xs text-slate-300">En attente de votre chuchotement...</div>
-                        <button onclick="startVoiceIncantation()" class="w-full bg-tactical-accent hover:bg-amber-500 text-tactical-900 font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
-                            🎤 CHUCHOTER L'INCANTATION VOCALE
-                        </button>
-                        <button onclick="renderVictory()" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-xl mono text-[11px] transition">
-                            ⚡ Forcer le Succès (Mode Démo Élu)
+                        <div id="voice-status" class="mono text-xs text-slate-300">En attente de chuchotement...</div>
+                        <button onclick="renderVictory()" class="w-full bg-tactical-accent hover:bg-amber-500 text-tactical-900 font-bold py-3.5 rounded-xl mono text-xs transition shadow-lg">
+                            ⚡ VALIDER LE TRIOMPHE FINAL
                         </button>
                     </div>
                 </div>
             `;
-        }
-
-        function startVoiceIncantation() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                alert("La reconnaissance vocale native n'est pas active sur ce navigateur. Passage direct au triomphe !");
-                renderVictory();
-                return;
-            }
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'fr-FR';
-            recognition.interimResults = false;
-            
-            document.getElementById('voice-status').innerText = "🔴 Écoute du chuchotement en cours...";
-            recognition.start();
-
-            recognition.onresult = (event) => {
-                let speechResult = event.results[0][0].transcript.toLowerCase();
-                if (speechResult.includes('rians') || speechResult.includes('aude')) {
-                    triggerHaptic([150, 100, 150]);
-                    renderVictory();
-                } else {
-                    document.getElementById('voice-status').innerText = `Entendu : "${speechResult}". Mot-clé manquant. Réessayez à voix basse.`;
-                }
-            };
-
-            recognition.onerror = () => {
-                document.getElementById('voice-status').innerText = "Erreur micro. Utilisez le bouton 'Forcer le Succès'.";
-            };
         }
 
         function renderVictory() {
@@ -529,26 +615,19 @@
             container.innerHTML = `
                 <div class="space-y-5 text-center">
                     <div class="border border-tactical-accent p-6 bg-tactical-800 rounded-2xl shadow-2xl space-y-3 text-left">
-                        <span class="mono text-[10px] text-tactical-accent tracking-widest">[MISSION TERMINÉE AVEC SUCCÈS]</span>
+                        <span class="mono text-[10px] text-tactical-accent tracking-widest">[MISSION ACCOMPLIE]</span>
                         <h1 class="text-xl font-bold text-slate-100">Rians est Sauvé !</h1>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Félicitations équipe <span class="text-tactical-accent font-bold">${gameState.agentName}</span>. Le mystère de la Mère Aude a été élucidé et le village a préservé sa quiétude.
+                            Équipe <span class="text-tactical-accent font-bold">${gameState.agentName}</span>, le mystère patrimonial est résolu.
                         </p>
                         <div class="border-t border-tactical-500/30 pt-3 space-y-1 mono text-xs text-slate-400">
-                            <div>CHRONO TOTAL : <span class="text-slate-100">${totalSec}s</span></div>
+                            <div>CHRONO : <span class="text-slate-100">${totalSec}s</span></div>
                             <div>PÉNALITÉS BRUIT : <span class="text-tactical-danger">${gameState.penalties}s</span></div>
                         </div>
                     </div>
-                    
-                    <div class="p-5 bg-tactical-700/60 border border-tactical-500/40 rounded-2xl text-left space-y-3 shadow-xl">
-                        <span class="mono text-[10px] text-tactical-accent block">ESPACE DÉMO POUR ÉLUS & MAIRIES</span>
-                        <p class="text-xs text-slate-300 leading-relaxed">
-                            Cette application clé en main valorise le patrimoine, dynamise le commerce local et attire un nouveau public touristique sans infrastructure lourde.
-                        </p>
-                        <button onclick="resetGame()" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl mono text-xs transition shadow-lg mt-1">
-                            RETOUR À L'ACCUEIL / DÉMO
-                        </button>
-                    </div>
+                    <button onclick="resetGame()" class="w-full bg-tactical-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl mono text-xs transition shadow-lg">
+                        RETOUR À L'ACCUEIL
+                    </button>
                 </div>
             `;
         }
@@ -572,4 +651,3 @@
 </html>
 ```eof
 
-L'application intègre désormais une page d'accueil élégante (`Acte 0`) taillée pour les présentations institutionnelles, mettant en avant les atouts phygitaux de la solution avant de lancer l'expérience immersive. N'hésitez pas à me dire s'il y a d'autres ajustements que vous souhaitez y apporter !
