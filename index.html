@@ -33,7 +33,6 @@
         .mono { font-family: 'JetBrains Mono', monospace; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: #070b14; color: #f8fafc; }
         .glow-accent { box-shadow: 0 0 25px rgba(245, 158, 11, 0.2); }
-        /* Custom dark tile styling for Leaflet */
         .leaflet-layer, .leaflet-control-zoom-in, .leaflet-control-zoom-out {
             filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
         }
@@ -122,14 +121,14 @@
     <audio id="ambient-audio" preload="auto" src="https://actions.google.com/sounds/v1/ambiences/night_forest_ambience.ogg"></audio>
 
     <script>
-        // --- ENGINE STATE ---
+        // --- ENGINE STATE (Fixed syntax bug with extra parenthesis) ---
         let gameState = {
             act: parseInt(localStorage.getItem('rians_demo_act')) || 0,
-            agentName: localStorage.getItem('rians_demo_agent')) || '',
+            agentName: localStorage.getItem('rians_demo_agent') || '',
             startTime: parseInt(localStorage.getItem('rians_demo_start')) || Date.now(),
             penalties: parseInt(localStorage.getItem('rians_demo_penalties')) || 0,
-            userLat: 47.186,
-            userLng: 2.614
+            userLat: 47.1860,
+            userLng: 2.6140
         };
 
         function saveState() {
@@ -159,7 +158,7 @@
             navigator.geolocation.watchPosition(position => {
                 gameState.userLat = position.coords.latitude;
                 gameState.userLng = position.coords.longitude;
-            }, e => console.log("GPS sim mode"), { enableHighAccuracy: true });
+            }, e => console.log("GPS sim mode active"), { enableHighAccuracy: true });
         }
 
         let mapInstance = null;
@@ -171,7 +170,7 @@
             if (!modal.classList.contains('hidden')) {
                 setTimeout(() => {
                     if (!mapInstance) {
-                        mapInstance = L.map('leaflet-map').setView([47.186, 2.614], 15);
+                        mapInstance = L.map('leaflet-map').setView([47.1860, 2.6140], 15);
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                             maxZoom: 19,
                             attribution: '© OpenStreetMap'
@@ -195,9 +194,9 @@
                 html: "<div style='background-color:#3b82f6; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow: 0 0 10px #3b82f6;'></div>",
                 iconSize: [14, 14]
             });
-            L.marker([gameState.userLat, gameState.userLng], {icon: playerIcon}).addTo(markersGroup).bindPopup("<b>Votre Position Actuelle</b>");
+            L.marker([gameState.userLat, gameState.userLng], {icon: playerIcon}).addTo(markersGroup).bindPopup("<b>Votre Position Actuelle (GPS)</b>");
 
-            // Landmarks in Rans
+            // Landmarks in Rians
             const landmarks = [
                 {name: "Mairie & Place Centrale (Acte I & VIII)", lat: 47.1860, lng: 2.6140, color: "#f59e0b"},
                 {name: "Puits Historique Nord (Acte II)", lat: 47.1872, lng: 2.6125, color: "#10b981"},
@@ -217,21 +216,31 @@
             });
         }
 
-        // --- MICROPHONE STEALTH SURVEILLANCE & VISIBLE METER ---
+        // --- MICROPHONE STEALTH SURVEILLANCE & VISIBLE METER (Fixed Feedback Loop) ---
         let isListening = false;
         function initMicrophone() {
             if (isListening) return;
             navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                 .then(stream => {
                     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
                     const analyser = audioCtx.createAnalyser();
                     const mic = audioCtx.createMediaStreamSource(stream);
                     const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+                    
+                    // FIX: Prevent audio feedback loop (Larsen) by routing through a silent GainNode (gain = 0)
+                    const silentGain = audioCtx.createGain();
+                    silentGain.gain.value = 0;
+
                     analyser.smoothingTimeConstant = 0.5;
                     analyser.fftSize = 512;
+                    
                     mic.connect(analyser);
                     analyser.connect(scriptNode);
-                    scriptNode.connect(audioCtx.destination);
+                    scriptNode.connect(silentGain);
+                    silentGain.connect(audioCtx.destination);
 
                     scriptNode.onaudioprocess = function() {
                         let array = new Uint8Array(analyser.frequencyBinCount);
@@ -262,7 +271,7 @@
                     if(dot) {
                         dot.className = "w-2.5 h-2.5 rounded-full bg-tactical-success animate-pulse";
                     }
-                }).catch(e => console.log("Mic simulation active"));
+                }).catch(e => console.log("Mic simulation active:", e));
         }
 
         let lastPenalty = 0;
@@ -649,4 +658,3 @@
     </script>
 </body>
 </html>
-
